@@ -141,6 +141,11 @@ class GameState:
         self.weaver_unlocked = False
         self.tailor_unlocked = False
         self.ranger_unlocked = False
+        self.smelter_first_ingots_done = False
+        self.harvest_announced = False
+        self.warn_food_low = False
+        self.warn_pelts_low = False
+        self.warn_smelter_idle = False
         self.bowyer_progress: List[float] = []
         self.weaver_progress: List[float] = []
         self.tailor_progress: List[float] = []
@@ -524,6 +529,11 @@ class GameState:
             "smithy_unlocked",
             "deck_seeded",
             "first_linen_announced",
+            "smelter_first_ingots_done",
+            "harvest_announced",
+            "warn_food_low",
+            "warn_pelts_low",
+            "warn_smelter_idle",
         ]
         for field in bool_fields:
             if field in state:
@@ -658,6 +668,11 @@ class GameState:
             "mine_unlocked": self.mine_unlocked,
             "smelter_unlocked": self.smelter_unlocked,
             "smithy_unlocked": self.smithy_unlocked,
+            "smelter_first_ingots_done": self.smelter_first_ingots_done,
+            "harvest_announced": self.harvest_announced,
+            "warn_food_low": self.warn_food_low,
+            "warn_pelts_low": self.warn_pelts_low,
+            "warn_smelter_idle": self.warn_smelter_idle,
             "quarries_discovered": self.quarries_discovered,
             "mines_discovered": self.mines_discovered,
             "smithy_last_crafted": self.smithy_last_crafted,
@@ -719,12 +734,12 @@ class GameState:
 
     def action_remove_hunter(self):
         if self.hunters <= 0:
-            self.add_log("no hunters to reassign.")
+        self.add_log("no hunters to reassign.")
             return
         self.hunters -= 1
         self.peasants += 1
         self.hunter_bows_equipped = min(self.hunter_bows_equipped, self.hunters)
-        self.add_log("a hunter lays down their bow and returns as a peasant.")
+        self.add_log("a hunter returns to the peasantry.")
 
     def action_add_woodsman(self):
         if self.peasants <= 0:
@@ -1219,6 +1234,8 @@ class GameState:
         if first_tick or phase_changed:
             self.season_phase = phase
             self.current_season_icon = self.season_icons[phase]
+            if phase != 1:
+                self.harvest_announced = False
             if phase == 2:  # autumn planting (reset/lock slots)
                 self.grain_buffer = 0.0
                 self.farm_growth_slots = self.farms
@@ -1230,7 +1247,9 @@ class GameState:
                         flax_gain = self.farm_growth_slots * FARM_FLAX_YIELD
                         self.resources["Flax"] += flax_gain
                     self.grain_buffer = 0.0
-                    self.add_log(f"summer harvest brings in {int(harvest)} grain.")
+                    if not self.harvest_announced:
+                        self.add_log(f"summer harvest brings in {int(harvest)} grain.")
+                        self.harvest_announced = True
         else:
             self.current_season_icon = self.season_icons[phase]
 
@@ -1359,6 +1378,24 @@ class GameState:
             self.resources["Pelts"] = 0.0
             cold_mult = STARVATION_PENALTY  # production slowed by cold
 
+        # warnings: low stocks (one-time until recovered)
+        if pop > 0:
+            food_thresh = max(food_need * 2, 2.0)
+            if total_food < food_thresh:
+                if not self.warn_food_low:
+                    self.add_log("stores run low on food.")
+                self.warn_food_low = True
+            elif self.warn_food_low and total_food >= food_thresh * 1.25:
+                self.warn_food_low = False
+
+            pelts_thresh = max(warmth_need * 2, 1.0)
+            if self.resources["Pelts"] < pelts_thresh:
+                if not self.warn_pelts_low:
+                    self.add_log("pelts grow scarce; people may get cold.")
+                self.warn_pelts_low = True
+            elif self.warn_pelts_low and self.resources["Pelts"] >= pelts_thresh * 1.25:
+                self.warn_pelts_low = False
+
         prod_mult = hunger_mult * cold_mult
 
         # production: hunters
@@ -1433,13 +1470,20 @@ class GameState:
             convertible_ore = min(max_convert * prod_mult, self.resources["Ore"])
             self.resources["Ore"] -= convertible_ore
             self.smelter_buffer += convertible_ore
+            smelter_idle = convertible_ore <= 0 and self.smelter_buffer < 0.5
+            if smelter_idle and not self.warn_smelter_idle:
+                self.add_log("smelters go idle waiting on ore.")
+                self.warn_smelter_idle = True
+            elif not smelter_idle and self.warn_smelter_idle:
+                self.warn_smelter_idle = False
             ingots_possible = int(self.smelter_buffer // 2)
             if ingots_possible > 0:
                 self.smelter_buffer -= ingots_possible * 2
-                first_ingots = self.resources["Ingots"] <= 0
+                first_ingots = (self.resources["Ingots"] <= 0) and (not self.smelter_first_ingots_done)
                 self.resources["Ingots"] += ingots_possible
                 if first_ingots:
                     self.add_log("smelters pour their first crude ingots.")
+                    self.smelter_first_ingots_done = True
 
         # production: smithies (craft tools/weapons)
         self.smithy_jobs = self._ensure_job_slots(self.smithy_jobs, self.smithies)
