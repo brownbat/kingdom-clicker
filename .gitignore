@@ -1,4 +1,16 @@
 __pycache__/
 archive/
+*.json
+TODO.md
+tree.md
 *.pyc
 .pytest_cache/
+.DS_Store
+.vscode/
+.idea/
+venv/
+.env
+*.env
+*.sqlite3
+*.log
+*.swp
