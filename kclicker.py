@@ -1982,9 +1982,7 @@ class GameApp:
             remote = self._fetch_remote_version()
             current = get_version()
             if remote and remote != current:
-                whl = f"kingdom_clicker-{remote}-py3-none-any.whl"
-                url = f"https://github.com/brownbat/kingdom-clicker/raw/master/dist/{whl}"
-                msg = f"Update available: v{current} → v{remote}. Run: pipx install --force {url}"
+                msg = f"Update available: v{current} → v{remote}. Run: python scripts/install_latest.py"
                 self.root.after(0, lambda: self._set_update_text(msg))
 
         threading.Thread(target=worker, daemon=True).start()
