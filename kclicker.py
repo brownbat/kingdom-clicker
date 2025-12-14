@@ -15,7 +15,7 @@ from game_state import TICK_MS, GameState
 UI_SCALE = 1.2
 UPDATE_HINT = ""  # static hint (if desired)
 UPDATE_CHECK_URL = "https://raw.githubusercontent.com/brownbat/kingdom-clicker/master/pyproject.toml"
-__version__ = "0.1.1a3"
+__version__ = "0.1.1a4"
 
 
 def get_version() -> str:
