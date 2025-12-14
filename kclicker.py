@@ -15,7 +15,7 @@ from game_state import TICK_MS, GameState
 UI_SCALE = 1.2
 UPDATE_HINT = ""  # static hint (if desired)
 UPDATE_CHECK_URL = "https://raw.githubusercontent.com/brownbat/kingdom-clicker/master/pyproject.toml"
-__version__ = "0.1.1a2"
+__version__ = "0.1.1a3"
 
 
 def get_version() -> str:
@@ -161,10 +161,17 @@ class GameApp:
         header.pack(fill="x")
         tk.Label(
             header,
-            text=f"🏰 Kingdom Clicker v{get_version()}",
+            text="🏰 Kingdom Clicker",
             font=("Helvetica", scaled(20), "bold"),
             bg="#485460",
             fg="#ffd32a",
+        ).pack()
+        tk.Label(
+            header,
+            text=f"v{get_version()}",
+            font=("Helvetica", scaled(11)),
+            bg="#485460",
+            fg="#d2dae2",
         ).pack()
         # optional update notice (filled when check completes)
         self.update_label = tk.Label(
