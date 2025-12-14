@@ -1,3 +1,4 @@
+README.md
 game_state.py
 kclicker.py
 pyproject.toml

@@ -1,10 +1,29 @@
 import argparse
 import json
+import re
+import threading
+import urllib.request
 from typing import Callable, Optional
+
+try:
+    from importlib import metadata as importlib_metadata
+except ImportError:  # pragma: no cover - Python <3.8 shim
+    import importlib_metadata  # type: ignore
 
 from game_state import TICK_MS, GameState
 
 UI_SCALE = 1.2
+UPDATE_HINT = ""  # static hint (if desired)
+UPDATE_CHECK_URL = "https://raw.githubusercontent.com/brownbat/kingdom-clicker/master/pyproject.toml"
+__version__ = "0.1.1a1"
+
+
+def get_version() -> str:
+    """Resolve installed package version; fall back to local constant."""
+    try:
+        return importlib_metadata.version("kingdom-clicker")
+    except Exception:
+        return __version__
 
 try:  # UI dependencies are optional for headless simulation
     import tkinter as tk
@@ -60,10 +79,11 @@ class Tooltip:
 class GameApp:
     def __init__(self, root: "tk.Tk", initial_state: Optional[dict] = None):
         self.root = root
-        self.root.title("Kingdom Clicker")
+        self.root.title(f"Kingdom Clicker v{get_version()}")
         self.root.geometry("1080x720")
         self.root.configure(bg="#1e272e")
         self._build_menu()
+        self.update_label = None
 
         # core simulation state
         self.state = GameState(initial_state=initial_state or {})
@@ -76,6 +96,7 @@ class GameApp:
         # start loop
         self.update_ui()
         self.root.after(TICK_MS, self._loop_tick)
+        self._start_update_check()
 
     def __getattribute__(self, name):
         if name.startswith("action_"):
@@ -140,11 +161,21 @@ class GameApp:
         header.pack(fill="x")
         tk.Label(
             header,
-            text="🏰 Kingdom Clicker",
+            text=f"🏰 Kingdom Clicker v{get_version()}",
             font=("Helvetica", scaled(20), "bold"),
             bg="#485460",
             fg="#ffd32a",
         ).pack()
+        # optional update notice (filled when check completes)
+        self.update_label = tk.Label(
+            header,
+            text=UPDATE_HINT,
+            font=("Helvetica", scaled(10)),
+            bg="#485460",
+            fg="#d2dae2",
+        )
+        if UPDATE_HINT:
+            self.update_label.pack()
 
         # resource bar
         res_frame = tk.Frame(self.root, bg="#1e272e", pady=10)
@@ -1935,6 +1966,39 @@ class GameApp:
     def _get_display_resource_names(self):
         return self.state._get_display_resource_names()
 
+    # --------- update checking ---------
+    def _start_update_check(self):
+        if not self.update_label:
+            return
+
+        def worker():
+            remote = self._fetch_remote_version()
+            current = get_version()
+            if remote and remote != current:
+                whl = f"kingdom_clicker-{remote}-py3-none-any.whl"
+                url = f"https://github.com/brownbat/kingdom-clicker/raw/master/dist/{whl}"
+                msg = f"Update available: v{current} → v{remote}. Run: pipx install --force {url}"
+                self.root.after(0, lambda: self._set_update_text(msg))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _set_update_text(self, text: str):
+        if self.update_label and text:
+            self.update_label.config(text=text)
+            if not self.update_label.winfo_manager():
+                self.update_label.pack()
+
+    def _fetch_remote_version(self) -> Optional[str]:
+        try:
+            with urllib.request.urlopen(UPDATE_CHECK_URL, timeout=3) as resp:
+                data = resp.read().decode("utf-8", errors="ignore")
+            m = re.search(r'version\s*=\s*"([^"]+)"', data)
+            if m:
+                return m.group(1).strip()
+        except Exception:
+            return None
+        return None
+
     def update_ui(self):
         s = self.state
         s._sync_food_total()
@@ -2399,6 +2463,11 @@ def main():
         help="Run the simulation without launching the UI (defaults to 100 ticks).",
     )
     parser.add_argument(
+        "--version",
+        action="store_true",
+        help="Print version and exit.",
+    )
+    parser.add_argument(
         "--sim-ticks",
         type=int,
         default=None,
@@ -2414,6 +2483,10 @@ def main():
         except Exception as exc:  # pragma: no cover - defensive logging
             print(f"Failed to load state file '{args.state}': {exc}")
             initial_state = {}
+
+    if args.version:
+        print(get_version())
+        raise SystemExit(0)
 
     headless_ticks = args.sim_ticks if args.sim_ticks is not None else (100 if args.headless else None)
     if headless_ticks is not None:
