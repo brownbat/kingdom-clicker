@@ -1,5 +1,5 @@
 Metadata-Version: 2.4
 Name: kingdom-clicker
-Version: 0.1.0
+Version: 0.1.1a1
 Summary: Headless-friendly Kingdom Clicker simulation with Tk UI.
 Requires-Python: >=3.10
