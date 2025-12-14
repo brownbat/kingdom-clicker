@@ -20,6 +20,16 @@ STARVATION_PENALTY = 0.75
 WEAVER_LINEN_TIME = 10.0  # slower loom pace to balance flax supply/demand
 TAILOR_WORK_TIME = 11.0  # slow tailors ~10% to ease linen drain versus weaving
 SMITHY_WORK_TIME = 1.0
+SAWYERS_PER_MILL = 2
+FARMERS_PER_FARM = 3
+MINERS_PER_MINE = 15
+STONEMASONS_PER_QUARRY = 10
+WEAVERS_PER_TEXTILE = 2
+TAILORS_PER_TEXTILE = 1
+SMELTERS_PER_FURNACE = 1
+BLACKSMITHS_PER_SMITHY = 1
+TANNERS_PER_TANNERY = 1
+TANNERY_WORK_TIME = 6.0
 
 RECIPES: Dict[str, Dict[str, Dict[str, float] | float]] = {
     "weave_linen": {"input": {"Flax": 1}, "output": {"Linen": 1}, "time": WEAVER_LINEN_TIME},
@@ -31,6 +41,7 @@ RECIPES: Dict[str, Dict[str, Dict[str, float] | float]] = {
     "tailor_clothing": {"input": {"Linen": 1}, "output": {"Clothing": 1}, "time": TAILOR_WORK_TIME},
     "tailor_cloak": {"input": {"Linen": 1, "Pelts": 1}, "output": {"Cloaks": 1}, "time": TAILOR_WORK_TIME},
     "tailor_gambeson": {"input": {"Linen": 2, "Pelts": 1}, "output": {"Gambesons": 1}, "time": TAILOR_WORK_TIME},
+    "tan_leather": {"input": {"Skins": 1, "Wood": 1}, "output": {"Leather": 1}, "time": TANNERY_WORK_TIME},
 }
 
 
@@ -100,6 +111,7 @@ class GameState:
             "Tools": 0.0,
             "Daggers": 0.0,
             "Swords": 0.0,
+            "Leather": 0.0,
         }
 
         # units
@@ -110,6 +122,14 @@ class GameState:
         self.weavers = 0
         self.rangers = 0
         self.tailors = 0
+        self.bowyer_shops = 0
+        self.sawyers = 0
+        self.farmers = 0
+        self.stonemasons = 0
+        self.miners = 0
+        self.smelter_workers = 0
+        self.blacksmiths = 0
+        self.tanners = 0
 
         # buildings
         self.lumber_mills = 0
@@ -119,6 +139,7 @@ class GameState:
         self.smelters = 0
         self.smithies = 0
         self.tailor_shops = 0
+        self.tanneries = 0
 
         # misc
         self.log_text = "an empty clearing awaits settlers."
@@ -141,6 +162,9 @@ class GameState:
         self.weaver_unlocked = False
         self.tailor_unlocked = False
         self.ranger_unlocked = False
+        self.tannery_unlocked = False
+        self.spring_found = False
+        self.cellar_unlocked = False
         self.smelter_first_ingots_done = False
         self.harvest_announced = False
         self.warn_food_low = False
@@ -166,6 +190,7 @@ class GameState:
         self.tailor_jobs: List[JobProcessor] = []
         self.bowyer_jobs: List[JobProcessor] = []
         self.smithy_jobs: List[JobProcessor] = []
+        self.tanner_jobs: List[JobProcessor] = []
         self.first_linen_announced = False
         self.quarries_discovered = 0
         self.mines_discovered = 0
@@ -227,13 +252,14 @@ class GameState:
             + self.bowyers
             + self.weavers
             + self.rangers
-            + self.lumber_mills
-            + self.farms
-            + self.tailor_shops
-            + self.quarries
-            + self.mines
-            + self.smelters
-            + self.smithies
+            + self.tailors
+            + self.sawyers
+            + self.farmers
+            + self.stonemasons
+            + self.miners
+            + self.smelter_workers
+            + self.blacksmiths
+            + self.tanners
         )
 
     def _sync_food_total(self):
@@ -249,8 +275,8 @@ class GameState:
             "Pelts": lambda s: 20 + 5 * s.houses,
             "Wood": lambda s: 20 + 10 * s.houses + 30 * s.lumber_mills,
             "Planks": lambda s: 20 + 40 * s.lumber_mills,
-            "Arrows": lambda s: 60 + 60 * s.bowyers,
-            "Bows": lambda s: 10 + 10 * s.bowyers,
+            "Arrows": lambda s: 60 + 120 * s.bowyer_shops,
+            "Bows": lambda s: 10 + 20 * s.bowyer_shops,
             "Cloaks": lambda s: 10 * s.tailors,
             "Clothing": lambda s: 15 * s.tailors,
             "Daggers": lambda s: 10 * s.smithies,
@@ -265,9 +291,45 @@ class GameState:
             "Stone": lambda s: 80 * s.quarries,
             "Swords": lambda s: 5 * s.smithies,
             "Tools": lambda s: 15 * s.smithies,
+            "Leather": lambda s: 20 + 15 * s.tanneries,
         }
         fn = caps.get(name)
         return float(fn(self)) if fn else None
+
+    def _job_capacity(self, job: str) -> Optional[int]:
+        mapping = {
+            "sawyer": ("lumber_mills", SAWYERS_PER_MILL),
+            "farmer": ("farms", FARMERS_PER_FARM),
+            "stonemason": ("quarries", STONEMASONS_PER_QUARRY),
+            "miner": ("mines", MINERS_PER_MINE),
+            "weaver": ("tailor_shops", WEAVERS_PER_TEXTILE),
+            "tailor": ("tailor_shops", TAILORS_PER_TEXTILE),
+            "smelter": ("smelters", SMELTERS_PER_FURNACE),
+            "blacksmith": ("smithies", BLACKSMITHS_PER_SMITHY),
+            "tanner": ("tanneries", TANNERS_PER_TANNERY),
+            "bowyer": ("bowyer_shops", 2),
+        }
+        data = mapping.get(job)
+        if not data:
+            return None
+        building_attr, per = data
+        return getattr(self, building_attr, 0) * per
+
+    def _trim_workers(self, attr: str, cap: Optional[int], list_attr: Optional[str] = None):
+        if cap is None:
+            return
+        current = getattr(self, attr)
+        if current <= cap:
+            return
+        excess = current - cap
+        setattr(self, attr, cap)
+        self.peasants += excess
+        if list_attr:
+            jobs = getattr(self, list_attr)
+            if len(jobs) > cap:
+                for job in jobs[cap:]:
+                    self._cancel_job(job)
+                setattr(self, list_attr, jobs[:cap])
 
     def _reserved_output_total(self, name: str) -> float:
         return self.reserved_outputs.get(name, 0.0)
@@ -279,7 +341,7 @@ class GameState:
         return sum(self.cellar.values())
 
     def _all_jobs(self) -> List[JobProcessor]:
-        return self.weaver_jobs + self.tailor_jobs + self.bowyer_jobs + self.smithy_jobs
+        return self.weaver_jobs + self.tailor_jobs + self.bowyer_jobs + self.smithy_jobs + self.tanner_jobs
 
     def _clear_job_reservations(self, processor: JobProcessor):
         processor.reserved_inputs = {}
@@ -472,13 +534,23 @@ class GameState:
             "weavers",
             "rangers",
             "tailors",
+            "bowyer_shops",
+            "sawyers",
+            "farmers",
+            "stonemasons",
+            "miners",
+            "smelter_workers",
+            "blacksmiths",
+            "tanners",
             "ranger_swords_equipped",
             "lumber_mills",
             "houses",
             "farms",
+            "bowyer_shops",
             "smelters",
             "smithies",
             "tailor_shops",
+            "tanneries",
             "quarries",
             "mines",
             "cellars",
@@ -508,9 +580,6 @@ class GameState:
                 except (TypeError, ValueError):
                     continue
 
-        # keep staffed tailors aligned to their shops
-        self.tailors = self.tailor_shops
-
         bool_fields = [
             "deck_refreshed_at_60",
             "jobs_unlocked",
@@ -523,6 +592,9 @@ class GameState:
             "weaver_unlocked",
             "tailor_unlocked",
             "ranger_unlocked",
+            "tannery_unlocked",
+            "spring_found",
+            "cellar_unlocked",
             "quarry_unlocked",
             "mine_unlocked",
             "smelter_unlocked",
@@ -566,6 +638,8 @@ class GameState:
             self.bowyer_jobs = self._deserialize_jobs(state["bowyer_jobs"])
         if isinstance(state.get("smithy_jobs"), list):
             self.smithy_jobs = self._deserialize_jobs(state["smithy_jobs"])
+        if isinstance(state.get("tanner_jobs"), list):
+            self.tanner_jobs = self._deserialize_jobs(state["tanner_jobs"])
         if isinstance(state.get("cellar"), dict):
             self.cellar = {k: float(v) for k, v in state["cellar"].items()}
         if "cellar_capacity" in state:
@@ -610,6 +684,21 @@ class GameState:
         self.current_season_icon = self.season_icons[self.season_phase % len(self.season_icons)]
         self._sync_food_total()
         self._rebuild_reservations()
+        # trim overstaffing if capacities shrank
+        cap_checks = [
+            ("sawyers", "sawyer", None),
+            ("farmers", "farmer", None),
+            ("stonemasons", "stonemason", None),
+            ("miners", "miner", None),
+            ("weavers", "weaver", "weaver_jobs"),
+            ("tailors", "tailor", "tailor_jobs"),
+            ("smelter_workers", "smelter", None),
+            ("blacksmiths", "blacksmith", "smithy_jobs"),
+            ("tanners", "tanner", "tanner_jobs"),
+            ("bowyers", "bowyer", "bowyer_jobs"),
+        ]
+        for attr, job_name, list_attr in cap_checks:
+            self._trim_workers(attr, self._job_capacity(job_name), list_attr)
 
     def _export_state(self) -> dict:
         return {
@@ -618,8 +707,16 @@ class GameState:
             "hunters": self.hunters,
             "woodsmen": self.woodsmen,
             "bowyers": self.bowyers,
+            "bowyer_shops": self.bowyer_shops,
             "weavers": self.weavers,
             "tailors": self.tailors,
+            "sawyers": self.sawyers,
+            "farmers": self.farmers,
+            "stonemasons": self.stonemasons,
+            "miners": self.miners,
+            "smelter_workers": self.smelter_workers,
+            "blacksmiths": self.blacksmiths,
+            "tanners": self.tanners,
             "rangers": self.rangers,
             "ranger_swords_equipped": self.ranger_swords_equipped,
             "lumber_mills": self.lumber_mills,
@@ -628,6 +725,7 @@ class GameState:
             "smelters": self.smelters,
             "smithies": self.smithies,
             "tailor_shops": self.tailor_shops,
+            "tanneries": self.tanneries,
             "quarries": self.quarries,
             "mines": self.mines,
             "base_pop_cap": self.base_pop_cap,
@@ -643,6 +741,7 @@ class GameState:
             "weaver_jobs": self._serialize_jobs(self.weaver_jobs),
             "tailor_jobs": self._serialize_jobs(self.tailor_jobs),
             "smithy_jobs": self._serialize_jobs(self.smithy_jobs),
+            "tanner_jobs": self._serialize_jobs(self.tanner_jobs),
             "total_meat_made": self.total_meat_made,
             "season_tick": self.season_tick,
             "season_phase": self.season_phase,
@@ -664,6 +763,9 @@ class GameState:
             "weaver_unlocked": self.weaver_unlocked,
             "tailor_unlocked": self.tailor_unlocked,
             "ranger_unlocked": self.ranger_unlocked,
+            "tannery_unlocked": self.tannery_unlocked,
+            "spring_found": self.spring_found,
+            "cellar_unlocked": self.cellar_unlocked,
             "quarry_unlocked": self.quarry_unlocked,
             "mine_unlocked": self.mine_unlocked,
             "smelter_unlocked": self.smelter_unlocked,
@@ -734,7 +836,7 @@ class GameState:
 
     def action_remove_hunter(self):
         if self.hunters <= 0:
-        self.add_log("no hunters to reassign.")
+            self.add_log("no hunters to reassign.")
             return
         self.hunters -= 1
         self.peasants += 1
@@ -757,9 +859,39 @@ class GameState:
         self.peasants += 1
         self.add_log("a woodsman returns to the village as a peasant.")
 
+    def action_add_sawyer(self):
+        if self.lumber_mills <= 0:
+            self.add_log("build a lumber mill before assigning sawyers.")
+            return
+        cap = self._job_capacity("sawyer")
+        if cap is not None and self.sawyers >= cap:
+            self.add_log("all saw benches are staffed. raise another mill.")
+            return
+        if self.peasants <= 0:
+            self.add_log("no idle peasants to send to the saw benches.")
+            return
+        self.peasants -= 1
+        self.sawyers += 1
+        self.add_log("a peasant takes up the saw, turning logs into planks.")
+
+    def action_remove_sawyer(self):
+        if self.sawyers <= 0:
+            self.add_log("no sawyers to reassign.")
+            return
+        self.sawyers -= 1
+        self.peasants += 1
+        self.add_log("a sawyer steps away from the bench and returns as a peasant.")
+
     def action_add_bowyer(self):
         if not self.bowyer_unlocked:
             self.add_log("you need better materials before anyone can craft bows.")
+            return
+        if self.bowyer_shops <= 0:
+            self.add_log("build a bowyer's shop before assigning bowyers.")
+            return
+        cap = self._job_capacity("bowyer")
+        if cap is not None and self.bowyers >= cap:
+            self.add_log("all bowyer benches are staffed. build another shop.")
             return
         if self.peasants <= 0:
             self.add_log("no idle peasants to put to the bowyer's bench.")
@@ -784,6 +916,13 @@ class GameState:
         if not self.weaver_unlocked:
             self.add_log("you need some flax before anyone can try weaving.")
             return
+        cap = self._job_capacity("weaver")
+        if cap is not None and cap <= 0:
+            self.add_log("build a textile workshop before hiring weavers.")
+            return
+        if cap is not None and self.weavers >= cap:
+            self.add_log("all looms are spoken for. build another workshop.")
+            return
         if self.peasants <= 0:
             self.add_log("no idle peasants to put to the loom.")
             return
@@ -802,6 +941,29 @@ class GameState:
             job = self.weaver_jobs.pop()
             self._cancel_job(job)
         self.add_log("a weaver leaves the loom and returns as a peasant.")
+
+    def action_add_farmer(self):
+        if self.farms <= 0:
+            self.add_log("build a farm before assigning farmers.")
+            return
+        cap = self._job_capacity("farmer")
+        if cap is not None and self.farmers >= cap:
+            self.add_log("all farm plots are worked. raise another farm.")
+            return
+        if self.peasants <= 0:
+            self.add_log("no idle peasants to till the fields.")
+            return
+        self.peasants -= 1
+        self.farmers += 1
+        self.add_log("a peasant shoulders a hoe and tends the fields.")
+
+    def action_remove_farmer(self):
+        if self.farmers <= 0:
+            self.add_log("no farmers to reassign.")
+            return
+        self.farmers -= 1
+        self.peasants += 1
+        self.add_log("a farmer leaves the fields and returns as a peasant.")
 
     def action_add_ranger(self):
         if not self.ranger_unlocked:
@@ -833,20 +995,72 @@ class GameState:
         self.ranger_swords_equipped = min(self.ranger_swords_equipped, self.rangers)
         self.add_log("a ranger returns to the village as a peasant.")
 
+    def action_add_stonemason(self):
+        if not self.quarry_unlocked or self.quarries <= 0:
+            self.add_log("build a quarry before assigning stonemasons.")
+            return
+        cap = self._job_capacity("stonemason")
+        if cap is not None and self.stonemasons >= cap:
+            self.add_log("all quarry slots are filled. build another quarry.")
+            return
+        if self.peasants <= 0:
+            self.add_log("no idle peasants to cut stone.")
+            return
+        self.peasants -= 1
+        self.stonemasons += 1
+        self.add_log("a peasant takes up mallet and chisel in the quarry.")
+
+    def action_remove_stonemason(self):
+        if self.stonemasons <= 0:
+            self.add_log("no stonemasons to reassign.")
+            return
+        self.stonemasons -= 1
+        self.peasants += 1
+        self.add_log("a stonemason leaves the quarry and returns as a peasant.")
+
+    def action_add_miner(self):
+        if not self.mine_unlocked or self.mines <= 0:
+            self.add_log("build a mine before assigning miners.")
+            return
+        cap = self._job_capacity("miner")
+        if cap is not None and self.miners >= cap:
+            self.add_log("all mine shafts are staffed. dig another mine.")
+            return
+        if self.peasants <= 0:
+            self.add_log("no idle peasants to send underground.")
+            return
+        self.peasants -= 1
+        self.miners += 1
+        self.add_log("a peasant descends into the mine as a miner.")
+
+    def action_remove_miner(self):
+        if self.miners <= 0:
+            self.add_log("no miners to reassign.")
+            return
+        self.miners -= 1
+        self.peasants += 1
+        self.add_log("a miner leaves the shafts and returns as a peasant.")
+
     def action_build_lumber_mill(self):
         cost_wood = 20
         if self.resources["Wood"] < cost_wood:
             self.add_log("not enough wood for a lumber mill.")
             return
-        if self.peasants <= 0:
-            self.add_log(
-                "everyone is busy (idle peasants 0). free a worker to staff the mill."
-            )
-            return
         self.resources["Wood"] -= cost_wood
-        self.peasants -= 1
         self.lumber_mills += 1
-        self.add_log("you raise a simple lumber mill. one peasant now works there.")
+        self.add_log("you raise a lumber mill. assign sawyers to cut planks.")
+
+    def action_build_bowyer_shop(self):
+        cost_planks = 6
+        if not self.bowyer_unlocked:
+            self.add_log("experiment with guts and wood before building a bowyer's shop.")
+            return
+        if self.resources["Planks"] < cost_planks:
+            self.add_log("not enough planks to raise a bowyer's shop.")
+            return
+        self.resources["Planks"] -= cost_planks
+        self.bowyer_shops += 1
+        self.add_log("a bowyer's shop goes up; two bowyers can work here.")
 
     def action_build_house(self):
         cost_planks = 10
@@ -862,15 +1076,9 @@ class GameState:
         if self.resources["Planks"] < cost_planks:
             self.add_log("not enough planks to build a farm.")
             return
-        if self.peasants <= 0:
-            self.add_log(
-                "everyone is busy (idle peasants 0). free a worker to tend the farm."
-            )
-            return
         self.resources["Planks"] -= cost_planks
-        self.peasants -= 1
         self.farms += 1
-        self.add_log("fields are tilled. a peasant now toils as a farmer.")
+        self.add_log("fields are tilled. assign farmers to work the land.")
 
     def action_build_quarry(self):
         cost_planks = 4
@@ -880,14 +1088,10 @@ class GameState:
         if self.resources["Planks"] < cost_planks:
             self.add_log("not enough planks to build a quarry.")
             return
-        if self.peasants <= 0:
-            self.add_log("everyone is busy (idle peasants 0). free a worker for the quarry.")
-            return
         self.resources["Planks"] -= cost_planks
         self.resources["QuarrySites"] -= 1
-        self.peasants -= 1
         self.quarries += 1
-        self.add_log("a quarry is established; stone can be cut here.")
+        self.add_log("a quarry is established; assign stonemasons to cut stone.")
 
     def action_build_mine(self):
         cost_planks = 4
@@ -897,28 +1101,20 @@ class GameState:
         if self.resources["Planks"] < cost_planks:
             self.add_log("not enough planks to shore up a mine entrance.")
             return
-        if self.peasants <= 0:
-            self.add_log("everyone is busy (idle peasants 0). free a worker for the mine.")
-            return
         self.resources["Planks"] -= cost_planks
         self.resources["MineSites"] -= 1
-        self.peasants -= 1
         self.mines += 1
-        self.add_log("a mine entrance is dug; ore extraction can begin.")
+        self.add_log("a mine entrance is dug; assign miners to pull ore.")
 
     def action_build_cellar(self):
         cost_planks = 6
-        cost_meat = 5
-        cost_grain = 5
+        if not self.cellar_unlocked:
+            self.add_log("stockpile 5 meat and 5 grain once to justify digging a cellar.")
+            return
         if self.resources["Planks"] < cost_planks:
             self.add_log("not enough planks to dig out a cellar.")
             return
-        if (self.resources["Meat"] < cost_meat) or (self.resources["Grain"] < cost_grain):
-            self.add_log("stockpile 5 meat and 5 grain before digging a cellar.")
-            return
         self.resources["Planks"] -= cost_planks
-        self.resources["Meat"] -= cost_meat
-        self.resources["Grain"] -= cost_grain
         self.cellars += 1
         self.cellar_capacity += 40
         self.add_log("a cool cellar is dug, adding 40 storage slots.")
@@ -982,19 +1178,15 @@ class GameState:
         cost_planks = 2
         cost_stone = 8
         if self.resources["Stone"] < cost_stone:
-            self.add_log("not enough stone to build a smelter.")
+            self.add_log("not enough stone to build a furnace.")
             return
         if self.resources["Planks"] < cost_planks:
-            self.add_log("not enough planks to shore up the smelter.")
-            return
-        if self.peasants <= 0:
-            self.add_log("everyone is busy (idle peasants 0). free a worker for the smelter.")
+            self.add_log("not enough planks to shore up the furnace.")
             return
         self.resources["Stone"] -= cost_stone
         self.resources["Planks"] -= cost_planks
-        self.peasants -= 1
         self.smelters += 1
-        self.add_log("a smelter is built; ore can now be refined into ingots.")
+        self.add_log("a furnace is built; ore can now be refined into ingots.")
 
     def action_build_smithy(self):
         cost_planks = 10
@@ -1005,83 +1197,209 @@ class GameState:
         if self.resources["Planks"] < cost_planks:
             self.add_log("not enough planks to raise a smithy.")
             return
-        if self.peasants <= 0:
-            self.add_log("everyone is busy (idle peasants 0). free a worker for the smithy.")
-            return
         self.resources["Stone"] -= cost_stone
         self.resources["Planks"] -= cost_planks
-        self.peasants -= 1
         self.smithies += 1
-        self.smithy_jobs.append(JobProcessor())
-        self.add_log("a smithy is built; metalwork can begin.")
+        self.add_log("a smithy is built; assign blacksmiths to the forge.")
 
     def action_build_tailor(self):
         cost_planks = 6
-        if not self.tailor_unlocked:
-            self.add_log("you need linen in stores before a tailor will set up shop.")
+        if not self.flax_unlocked:
+            self.add_log("gather flax before building a textile workshop.")
             return
         if self.resources["Planks"] < cost_planks:
             self.add_log("not enough planks to build a tailor's shop.")
             return
-        if self.peasants <= 0:
-            self.add_log("everyone is busy (idle peasants 0). free a worker for tailoring.")
-            return
         self.resources["Planks"] -= cost_planks
-        self.peasants -= 1
         self.tailor_shops += 1
+        self.sticky_resources.update({"Clothing", "Cloaks", "Gambesons"})
+        self.add_log("a textile workshop is built; assign weavers and tailors inside.")
+
+    def action_build_tannery(self):
+        cost_wood = 8
+        cost_planks = 4
+        if not self.tannery_unlocked:
+            self.add_log("locate a spring before building a tannery.")
+            return
+        if self.resources["Wood"] < cost_wood or self.resources["Planks"] < cost_planks:
+            self.add_log("not enough wood and planks to raise a tannery.")
+            return
+        self.resources["Wood"] -= cost_wood
+        self.resources["Planks"] -= cost_planks
+        self.tanneries += 1
+        self.add_log("a tannery is built; assign a tanner to cure leather.")
+
+    def action_add_smelter_worker(self):
+        if not self.smelter_unlocked:
+            self.add_log("smelting is not yet understood.")
+            return
+        if self.smelters <= 0:
+            self.add_log("build a furnace before assigning smelters.")
+            return
+        cap = self._job_capacity("smelter")
+        if cap is not None and self.smelter_workers >= cap:
+            self.add_log("all furnaces are staffed. build another furnace.")
+            return
+        if self.peasants <= 0:
+            self.add_log("no idle peasants to tend the furnaces.")
+            return
+        self.peasants -= 1
+        self.smelter_workers += 1
+        self.add_log("a peasant tends the furnace, ready to smelt ore.")
+
+    def action_remove_smelter_worker(self):
+        if self.smelter_workers <= 0:
+            self.add_log("no smelters to reassign.")
+            return
+        self.smelter_workers -= 1
+        self.peasants += 1
+        self.add_log("a smelter leaves the furnace and returns as a peasant.")
+
+    def action_add_blacksmith(self):
+        if not self.smithy_unlocked:
+            self.add_log("metalwork is not yet unlocked.")
+            return
+        if self.smithies <= 0:
+            self.add_log("build a smithy before assigning blacksmiths.")
+            return
+        cap = self._job_capacity("blacksmith")
+        if cap is not None and self.blacksmiths >= cap:
+            self.add_log("all forges are staffed. build another smithy.")
+            return
+        if self.peasants <= 0:
+            self.add_log("no idle peasants to hammer steel.")
+            return
+        self.peasants -= 1
+        self.blacksmiths += 1
+        self.add_log("a peasant takes up hammer and tongs as a blacksmith.")
+
+    def action_remove_blacksmith(self):
+        if self.blacksmiths <= 0:
+            self.add_log("no blacksmiths to reassign.")
+            return
+        self.blacksmiths -= 1
+        self.peasants += 1
+        if self.smithy_jobs:
+            job = self.smithy_jobs.pop()
+            self._cancel_job(job)
+        self.add_log("a blacksmith leaves the forge and returns as a peasant.")
+
+    def action_add_tailor_worker(self):
+        if not self.tailor_unlocked:
+            self.add_log("you need linen in stores before a tailor will set up shop.")
+            return
+        if self.tailor_shops <= 0:
+            self.add_log("build a textile workshop before assigning tailors.")
+            return
+        cap = self._job_capacity("tailor")
+        if cap is not None and self.tailors >= cap:
+            self.add_log("all sewing benches are staffed. build another workshop.")
+            return
+        if self.peasants <= 0:
+            self.add_log("no idle peasants to sew garments.")
+            return
+        self.peasants -= 1
         self.tailors += 1
         self.tailor_jobs.append(JobProcessor())
         self.sticky_resources.update({"Clothing", "Cloaks", "Gambesons"})
-        self.add_log("a tailor sets up a modest shop, ready to sew garments.")
+        self.add_log("a peasant starts tailoring garments.")
+
+    def action_remove_tailor_worker(self):
+        if self.tailors <= 0:
+            self.add_log("no tailors to reassign.")
+            return
+        self.tailors -= 1
+        self.peasants += 1
+        if self.tailor_jobs:
+            job = self.tailor_jobs.pop()
+            self._cancel_job(job)
+        self.add_log("a tailor returns as an idle peasant.")
+
+    def action_add_tanner(self):
+        if not self.tannery_unlocked or self.tanneries <= 0:
+            self.add_log("build a tannery before assigning tanners.")
+            return
+        cap = self._job_capacity("tanner")
+        if cap is not None and self.tanners >= cap:
+            self.add_log("all tanning pits are staffed. build another tannery.")
+            return
+        if self.peasants <= 0:
+            self.add_log("no idle peasants to tan hides.")
+            return
+        self.peasants -= 1
+        self.tanners += 1
+        self.tanner_jobs.append(JobProcessor())
+        self.sticky_resources.add("Leather")
+        self.add_log("a peasant starts curing leather at the tannery.")
+
+    def action_remove_tanner(self):
+        if self.tanners <= 0:
+            self.add_log("no tanners to reassign.")
+            return
+        self.tanners -= 1
+        self.peasants += 1
+        if self.tanner_jobs:
+            job = self.tanner_jobs.pop()
+            self._cancel_job(job)
+        self.add_log("a tanner leaves the vats and returns as a peasant.")
+
 
     def action_abandon_lumber_mill(self):
         if self.lumber_mills <= 0:
             self.add_log("no lumber mills to abandon.")
             return
         self.lumber_mills -= 1
-        self.peasants += 1
+        self._trim_workers("sawyers", self._job_capacity("sawyer"))
         self.add_log("you shutter a lumber mill. its worker returns as an idle peasant.")
+
+    def action_abandon_bowyer_shop(self):
+        if self.bowyer_shops <= 0:
+            self.add_log("no bowyer shops to close.")
+            return
+        self.bowyer_shops -= 1
+        self._trim_workers("bowyers", self._job_capacity("bowyer"), "bowyer_jobs")
+        self.add_log("a bowyer's shop is closed; any bowyers there return as peasants.")
 
     def action_abandon_farm(self):
         if self.farms <= 0:
             self.add_log("no farms to abandon.")
             return
         self.farms -= 1
-        self.peasants += 1
+        self._trim_workers("farmers", self._job_capacity("farmer"))
         self.add_log("you let a farm go fallow. its worker returns as an idle peasant.")
 
     def action_abandon_smelter(self):
         if self.smelters <= 0:
-            self.add_log("no smelters to close.")
+            self.add_log("no furnaces to close.")
             return
         self.smelters -= 1
-        self.peasants += 1
-        self.add_log("you bank a smelter's fires. its worker returns as an idle peasant.")
+        self._trim_workers("smelter_workers", self._job_capacity("smelter"))
+        self.add_log("you bank a furnace's fires. its worker returns as an idle peasant.")
 
     def action_abandon_smithy(self):
         if self.smithies <= 0:
             self.add_log("no smithies to shutter.")
             return
         self.smithies -= 1
-        self.peasants += 1
-        if self.smithy_jobs:
-            job = self.smithy_jobs.pop()
-            self._cancel_job(job)
-        self.add_log("you close a smithy. its worker returns as an idle peasant.")
+        self._trim_workers("blacksmiths", self._job_capacity("blacksmith"), "smithy_jobs")
+        self.add_log("you close a smithy. any blacksmiths there return as peasants.")
 
     def action_abandon_tailor(self):
         if self.tailor_shops <= 0:
             self.add_log("no tailors to send away.")
             return
         self.tailor_shops -= 1
-        self.tailors = max(0, self.tailor_shops)
-        self.peasants += 1
-        if self.tailor_jobs and len(self.tailor_jobs) > self.tailor_shops:
-            to_remove = self.tailor_jobs[self.tailor_shops :]
-            for job in to_remove:
-                self._cancel_job(job)
-            self.tailor_jobs = self.tailor_jobs[: self.tailor_shops]
-        self.add_log("a tailor closes shop, returning as an idle peasant.")
+        self._trim_workers("weavers", self._job_capacity("weaver"), "weaver_jobs")
+        self._trim_workers("tailors", self._job_capacity("tailor"), "tailor_jobs")
+        self.add_log("a textile workshop closes; staff return as peasants if over capacity.")
+
+    def action_abandon_tannery(self):
+        if self.tanneries <= 0:
+            self.add_log("no tanneries to dismantle.")
+            return
+        self.tanneries -= 1
+        self._trim_workers("tanners", self._job_capacity("tanner"), "tanner_jobs")
+        self.add_log("a tannery is torn down.")
 
     # --------- job helpers ---------
 
@@ -1210,6 +1528,8 @@ class GameState:
             self.resources["MineSites"] += 1
             self.mine_unlocked = True
             self.mines_discovered += 1
+        if card == "spring":
+            self.spring_found = True
         log_map = {
             "forest": "rangers chart a dense forest.",
             "clearing": "rangers find a quiet clearing.",
@@ -1238,13 +1558,13 @@ class GameState:
                 self.harvest_announced = False
             if phase == 2:  # autumn planting (reset/lock slots)
                 self.grain_buffer = 0.0
-                self.farm_growth_slots = self.farms
+                self.farm_growth_slots = min(self.farmers, self._job_capacity("farmer") or 0)
             if phase == 1:  # summer harvest
                 harvest = self.grain_buffer
                 if harvest > 0:
                     self.resources["Grain"] += harvest
                     if self.flax_unlocked:
-                        flax_gain = self.farm_growth_slots * FARM_FLAX_YIELD
+                        flax_gain = (self.farm_growth_slots / max(1, FARMERS_PER_FARM)) * FARM_FLAX_YIELD
                         self.resources["Flax"] += flax_gain
                     self.grain_buffer = 0.0
                     if not self.harvest_announced:
@@ -1287,9 +1607,17 @@ class GameState:
         if not self.flax_unlocked and self.resources["Skins"] >= SKIN_FLAX_UNLOCK:
             self.flax_unlocked = True
             self.add_log("farmers learn to ready fields for flax during harvests.")
-        if not self.weaver_unlocked and self.resources["Flax"] >= 3:
+        if not self.tailor_unlocked and (
+            self.resources["Linen"] >= 1 or self.tailor_shops > 0
+        ):
+            self.tailor_unlocked = True
+            self.add_log("a villager offers to tailor garments from your linen stock.")
+        if not self.weaver_unlocked and self.tailor_shops > 0:
             self.weaver_unlocked = True
-            self.add_log("stored flax invites experiments at a simple loom.")
+            self.add_log("with a textile workshop built, villagers try weaving flax.")
+        if not self.cellar_unlocked and (self.resources["Meat"] >= 5 and self.resources["Grain"] >= 5):
+            self.cellar_unlocked = True
+            self.add_log("with 5 meat and 5 grain ever stored, villagers consider digging a cellar.")
 
         if (
             not self.bowyer_unlocked
@@ -1334,11 +1662,9 @@ class GameState:
         ):
             self.smithy_unlocked = True
 
-        if not self.tailor_unlocked and (
-            self.resources["Linen"] >= 1 or self.tailor_shops > 0
-        ):
-            self.tailor_unlocked = True
-            self.add_log("a villager offers to tailor garments from your linen stock.")
+        if not self.tannery_unlocked and self.spring_found:
+            self.tannery_unlocked = True
+            self.add_log("a clean spring is found—tanning vats can be dug now.")
 
         if self.jobs_unlocked and not previous_jobs_unlocked and initial:
             self.pending_logs = list(self.pending_logs)
@@ -1398,6 +1724,17 @@ class GameState:
 
         prod_mult = hunger_mult * cold_mult
 
+        # active staffing per building-limited job
+        active_sawyers = min(self.sawyers, self._job_capacity("sawyer") or 0)
+        active_farmers = min(self.farmers, self._job_capacity("farmer") or 0)
+        active_stonemasons = min(self.stonemasons, self._job_capacity("stonemason") or 0)
+        active_miners = min(self.miners, self._job_capacity("miner") or 0)
+        active_weavers = min(self.weavers, self._job_capacity("weaver") or 0)
+        active_tailors = min(self.tailors, self._job_capacity("tailor") or 0)
+        active_smelters = min(self.smelter_workers, self._job_capacity("smelter") or 0)
+        active_blacksmiths = min(self.blacksmiths, self._job_capacity("blacksmith") or 0)
+        active_tanners = min(self.tanners, self._job_capacity("tanner") or 0)
+
         # production: hunters
         if self.hunters > 0:
             # keep equipped bows in sync with hunter count
@@ -1448,31 +1785,31 @@ class GameState:
 
         # production: farms
         if self.farms > 0 and self.season_phase in (2, 3, 0):  # autumn/winter/spring growth
-            active_farms = min(self.farms, self.farm_growth_slots)
-            if active_farms > 0:
-                self.grain_buffer += active_farms * FARM_GRAIN_YIELD * prod_mult
+            if active_farmers > 0:
+                per_farmer = FARM_GRAIN_YIELD / max(1, FARMERS_PER_FARM)
+                self.grain_buffer += active_farmers * per_farmer * prod_mult
 
         # production: quarries (stone) and mines (ore)
-        if self.quarries > 0:
+        if active_stonemasons > 0:
             self.resources.setdefault("Stone", 0.0)
             self.sticky_resources.add("Stone")
-            self.resources["Stone"] += self.quarries * 1.2 * prod_mult
-        if self.mines > 0:
+            self.resources["Stone"] += active_stonemasons * 1.2 * prod_mult
+        if active_miners > 0:
             self.resources.setdefault("Ore", 0.0)
             self.sticky_resources.add("Ore")
-            self.resources["Ore"] += self.mines * 0.8 * prod_mult
+            self.resources["Ore"] += active_miners * 0.8 * prod_mult
 
         # production: smelters (convert ore -> ingots)
-        if self.smelters > 0:
+        if active_smelters > 0:
             self.resources.setdefault("Ingots", 0.0)
             self.sticky_resources.add("Ingots")
-            max_convert = self.smelters * 1.2  # ore per tick
+            max_convert = active_smelters * 1.2  # ore per tick
             convertible_ore = min(max_convert * prod_mult, self.resources["Ore"])
             self.resources["Ore"] -= convertible_ore
             self.smelter_buffer += convertible_ore
             smelter_idle = convertible_ore <= 0 and self.smelter_buffer < 0.5
             if smelter_idle and not self.warn_smelter_idle:
-                self.add_log("smelters go idle waiting on ore.")
+                self.add_log("furnaces go idle waiting on ore.")
                 self.warn_smelter_idle = True
             elif not smelter_idle and self.warn_smelter_idle:
                 self.warn_smelter_idle = False
@@ -1482,12 +1819,12 @@ class GameState:
                 first_ingots = (self.resources["Ingots"] <= 0) and (not self.smelter_first_ingots_done)
                 self.resources["Ingots"] += ingots_possible
                 if first_ingots:
-                    self.add_log("smelters pour their first crude ingots.")
+                    self.add_log("furnaces pour their first crude ingots.")
                     self.smelter_first_ingots_done = True
 
         # production: smithies (craft tools/weapons)
-        self.smithy_jobs = self._ensure_job_slots(self.smithy_jobs, self.smithies)
-        if self.smithies > 0:
+        self.smithy_jobs = self._ensure_job_slots(self.smithy_jobs, active_blacksmiths)
+        if active_blacksmiths > 0:
             self.resources.setdefault("Tools", 0.0)
             self.resources.setdefault("Daggers", 0.0)
             self.resources.setdefault("Swords", 0.0)
@@ -1516,9 +1853,25 @@ class GameState:
                     elif output_name == "Tools":
                         self.smithy_last_crafted["Tools"] = self.smithy_craft_counter
 
+        # production: tanners
+        self.tanner_jobs = self._ensure_job_slots(self.tanner_jobs, active_tanners)
+        if active_tanners > 0:
+            self.resources.setdefault("Leather", 0.0)
+            self.sticky_resources.add("Leather")
+            for processor in self.tanner_jobs:
+                if (
+                    processor.current_recipe is None
+                    and self.resources["Skins"] >= 1
+                    and self.resources["Wood"] >= 1
+                    and self._can_accept_output("tan_leather")
+                ):
+                    processor.start_job("tan_leather", self)
+                processor.tick(prod_mult)
+                processor.complete_job(self)
+
         # production: tailors (convert linen/pelts into clothing types)
-        self.tailor_jobs = self._ensure_job_slots(self.tailor_jobs, self.tailor_shops)
-        if self.tailor_shops > 0:
+        self.tailor_jobs = self._ensure_job_slots(self.tailor_jobs, active_tailors)
+        if active_tailors > 0:
             self.resources.setdefault("Clothing", 0.0)
             self.resources.setdefault("Cloaks", 0.0)
             self.resources.setdefault("Gambesons", 0.0)
@@ -1563,9 +1916,9 @@ class GameState:
                 self.ranger_draw_pool -= 1.0
                 self._draw_ranger_card()
 
-        # production: lumber mills (convert wood -> planks)
-        if self.lumber_mills > 0:
-            max_convert = self.lumber_mills * 1.5  # wood per tick
+        # production: lumber mills (convert wood -> planks via sawyers)
+        if active_sawyers > 0:
+            max_convert = active_sawyers * 1.5  # wood per tick
             convertible_wood = min(max_convert * prod_mult, self.resources["Wood"])
             self.resources["Wood"] -= convertible_wood
             self.lumber_buffer += convertible_wood
@@ -1576,8 +1929,8 @@ class GameState:
                 self.resources["Planks"] += planks_possible * prod_mult
 
         # production: weavers (convert flax -> linen)
-        self.weaver_jobs = self._ensure_job_slots(self.weaver_jobs, self.weavers)
-        if self.weavers > 0:
+        self.weaver_jobs = self._ensure_job_slots(self.weaver_jobs, active_weavers)
+        if active_weavers > 0:
             for processor in self.weaver_jobs:
                 if (
                     processor.current_recipe is None

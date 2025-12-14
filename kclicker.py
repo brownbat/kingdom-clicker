@@ -176,6 +176,7 @@ class GameApp:
             "Tools": "#d2dae2",
             "Daggers": "#c44569",
             "Swords": "#ff5252",
+            "Leather": "#c7a17a",
         }
         self.res_grid = tk.Frame(res_frame, bg="#1e272e")
         self.res_grid.pack(fill="x")
@@ -236,6 +237,22 @@ class GameApp:
 
         content.bind("<Configure>", _on_frame_configure)
         canvas.bind("<Configure>", _on_canvas_configure)
+        # mouse wheel scrolling (Windows/Mac delta; Linux button 4/5)
+        def _on_mousewheel(event):
+            if canvas.bbox("all")[3] <= canvas.winfo_height():
+                return
+            if event.num == 4:  # Linux scroll up
+                delta = -1
+            elif event.num == 5:  # Linux scroll down
+                delta = 1
+            else:
+                delta = -1 * int(event.delta / 120) if event.delta else 0
+            if delta:
+                canvas.yview_scroll(delta, "units")
+
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        canvas.bind_all("<Button-4>", _on_mousewheel)
+        canvas.bind_all("<Button-5>", _on_mousewheel)
 
         for i in range(3):
             content.columnconfigure(i, weight=1)
@@ -286,7 +303,7 @@ class GameApp:
             font=("Helvetica", scaled(11), "bold"),
             bg="#1e272e",
             fg="#ffffff",
-            width=3,
+            width=5,
             anchor="center",
         )
         self.peasant_value.pack(side="left")
@@ -330,7 +347,7 @@ class GameApp:
             font=("Helvetica", scaled(11), "bold"),
             bg="#1e272e",
             fg="#ffffff",
-            width=3,
+            width=5,
             anchor="center",
         )
         self.hunter_value.pack(side="left")
@@ -374,7 +391,7 @@ class GameApp:
             font=("Helvetica", scaled(11), "bold"),
             bg="#1e272e",
             fg="#ffffff",
-            width=3,
+            width=5,
             anchor="center",
         )
         self.woodsman_value.pack(side="left")
@@ -414,11 +431,11 @@ class GameApp:
         self.btn_bowyer_minus.pack(side="left", padx=(4, 2))
         self.bowyer_value = tk.Label(
             bowyer_row,
-            text="0",
+            text="0/0",
             font=("Helvetica", scaled(11), "bold"),
             bg="#1e272e",
             fg="#ffffff",
-            width=3,
+            width=5,
             anchor="center",
         )
         self.bowyer_value.pack(side="left")
@@ -462,7 +479,7 @@ class GameApp:
             font=("Helvetica", scaled(11), "bold"),
             bg="#1e272e",
             fg="#ffffff",
-            width=3,
+            width=5,
             anchor="center",
         )
         self.weaver_value.pack(side="left")
@@ -477,6 +494,96 @@ class GameApp:
         )
         self.btn_weaver_plus.pack(side="left", padx=2)
         Tooltip(self.btn_weaver_plus, "Cost: 1 peasant. Spins flax into linen.")
+
+        # sawyer row
+        sawyer_row = tk.Frame(assign_col, bg="#1e272e")
+        self.sawyer_row = sawyer_row
+        self.sawyer_label = tk.Label(
+            sawyer_row,
+            text="sawyer",
+            font=("Helvetica", scaled(11)),
+            bg="#1e272e",
+            fg="#ffffff",
+            width=14,
+            anchor="w",
+        )
+        self.sawyer_label.pack(side="left")
+        self.btn_sawyer_minus = tk.Button(
+            sawyer_row,
+            text="-",
+            font=("Helvetica", scaled(10), "bold"),
+            width=2,
+            bg="#57606f",
+            fg="#ffffff",
+            command=self._bind_action(self.state.action_remove_sawyer),
+        )
+        self.btn_sawyer_minus.pack(side="left", padx=(4, 2))
+        self.sawyer_value = tk.Label(
+            sawyer_row,
+            text="0/0",
+            font=("Helvetica", scaled(11), "bold"),
+            bg="#1e272e",
+            fg="#ffffff",
+            width=5,
+            anchor="center",
+        )
+        self.sawyer_value.pack(side="left")
+        self.btn_sawyer_plus = tk.Button(
+            sawyer_row,
+            text="+",
+            font=("Helvetica", scaled(10), "bold"),
+            width=2,
+            bg="#ffa801",
+            fg="#000000",
+            command=self._bind_action(self.state.action_add_sawyer),
+        )
+        self.btn_sawyer_plus.pack(side="left", padx=2)
+        Tooltip(self.btn_sawyer_plus, "Assigns a peasant as sawyer (2 slots per mill).")
+
+        # farmer row
+        farmer_row = tk.Frame(assign_col, bg="#1e272e")
+        self.farmer_row = farmer_row
+        self.farmer_label = tk.Label(
+            farmer_row,
+            text="farmer",
+            font=("Helvetica", scaled(11)),
+            bg="#1e272e",
+            fg="#ffffff",
+            width=14,
+            anchor="w",
+        )
+        self.farmer_label.pack(side="left")
+        self.btn_farmer_minus = tk.Button(
+            farmer_row,
+            text="-",
+            font=("Helvetica", scaled(10), "bold"),
+            width=2,
+            bg="#57606f",
+            fg="#ffffff",
+            command=self._bind_action(self.state.action_remove_farmer),
+        )
+        self.btn_farmer_minus.pack(side="left", padx=(4, 2))
+        self.farmer_value = tk.Label(
+            farmer_row,
+            text="0/0",
+            font=("Helvetica", scaled(11), "bold"),
+            bg="#1e272e",
+            fg="#ffffff",
+            width=5,
+            anchor="center",
+        )
+        self.farmer_value.pack(side="left")
+        self.btn_farmer_plus = tk.Button(
+            farmer_row,
+            text="+",
+            font=("Helvetica", scaled(10), "bold"),
+            width=2,
+            bg="#f5cd79",
+            fg="#000000",
+            command=self._bind_action(self.state.action_add_farmer),
+        )
+        self.btn_farmer_plus.pack(side="left", padx=2)
+        Tooltip(self.btn_farmer_plus, "Assigns a peasant as farmer (3 slots per farm).")
 
         # ranger row (starts locked)
         ranger_row = tk.Frame(assign_col, bg="#1e272e")
@@ -507,7 +614,7 @@ class GameApp:
             font=("Helvetica", scaled(11), "bold"),
             bg="#1e272e",
             fg="#ffffff",
-            width=3,
+            width=5,
             anchor="center",
         )
         self.ranger_value.pack(side="left")
@@ -522,6 +629,276 @@ class GameApp:
         )
         self.btn_ranger_plus.pack(side="left", padx=2)
         Tooltip(self.btn_ranger_plus, "Cost: 1 bow, 10 arrows, 1 peasant (idle)")
+
+        # stonemason row
+        stonemason_row = tk.Frame(assign_col, bg="#1e272e")
+        self.stonemason_row = stonemason_row
+        self.stonemason_label = tk.Label(
+            stonemason_row,
+            text="stonemason",
+            font=("Helvetica", scaled(11)),
+            bg="#1e272e",
+            fg="#ffffff",
+            width=14,
+            anchor="w",
+        )
+        self.stonemason_label.pack(side="left")
+        self.btn_stonemason_minus = tk.Button(
+            stonemason_row,
+            text="-",
+            font=("Helvetica", scaled(10), "bold"),
+            width=2,
+            bg="#57606f",
+            fg="#ffffff",
+            command=self._bind_action(self.state.action_remove_stonemason),
+        )
+        self.btn_stonemason_minus.pack(side="left", padx=(4, 2))
+        self.stonemason_value = tk.Label(
+            stonemason_row,
+            text="0/0",
+            font=("Helvetica", scaled(11), "bold"),
+            bg="#1e272e",
+            fg="#ffffff",
+            width=5,
+            anchor="center",
+        )
+        self.stonemason_value.pack(side="left")
+        self.btn_stonemason_plus = tk.Button(
+            stonemason_row,
+            text="+",
+            font=("Helvetica", scaled(10), "bold"),
+            width=2,
+            bg="#d1ccc0",
+            fg="#000000",
+            command=self._bind_action(self.state.action_add_stonemason),
+        )
+        self.btn_stonemason_plus.pack(side="left", padx=2)
+        Tooltip(self.btn_stonemason_plus, "Assigns a stonemason (quarry slots).")
+
+        # miner row
+        miner_row = tk.Frame(assign_col, bg="#1e272e")
+        self.miner_row = miner_row
+        self.miner_label = tk.Label(
+            miner_row,
+            text="miner",
+            font=("Helvetica", scaled(11)),
+            bg="#1e272e",
+            fg="#ffffff",
+            width=14,
+            anchor="w",
+        )
+        self.miner_label.pack(side="left")
+        self.btn_miner_minus = tk.Button(
+            miner_row,
+            text="-",
+            font=("Helvetica", scaled(10), "bold"),
+            width=2,
+            bg="#57606f",
+            fg="#ffffff",
+            command=self._bind_action(self.state.action_remove_miner),
+        )
+        self.btn_miner_minus.pack(side="left", padx=(4, 2))
+        self.miner_value = tk.Label(
+            miner_row,
+            text="0/0",
+            font=("Helvetica", scaled(11), "bold"),
+            bg="#1e272e",
+            fg="#ffffff",
+            width=5,
+            anchor="center",
+        )
+        self.miner_value.pack(side="left")
+        self.btn_miner_plus = tk.Button(
+            miner_row,
+            text="+",
+            font=("Helvetica", scaled(10), "bold"),
+            width=2,
+            bg="#ced6e0",
+            fg="#000000",
+            command=self._bind_action(self.state.action_add_miner),
+        )
+        self.btn_miner_plus.pack(side="left", padx=2)
+        Tooltip(self.btn_miner_plus, "Assigns a miner (15 slots per mine).")
+
+        # smelter worker row
+        smelter_worker_row = tk.Frame(assign_col, bg="#1e272e")
+        self.smelter_worker_row = smelter_worker_row
+        self.smelter_worker_label = tk.Label(
+            smelter_worker_row,
+            text="smelter",
+            font=("Helvetica", scaled(11)),
+            bg="#1e272e",
+            fg="#ffffff",
+            width=14,
+            anchor="w",
+        )
+        self.smelter_worker_label.pack(side="left")
+        self.btn_smelter_worker_minus = tk.Button(
+            smelter_worker_row,
+            text="-",
+            font=("Helvetica", scaled(10), "bold"),
+            width=2,
+            bg="#57606f",
+            fg="#ffffff",
+            command=self._bind_action(self.state.action_remove_smelter_worker),
+        )
+        self.btn_smelter_worker_minus.pack(side="left", padx=(4, 2))
+        self.smelter_worker_value = tk.Label(
+            smelter_worker_row,
+            text="0/0",
+            font=("Helvetica", scaled(11), "bold"),
+            bg="#1e272e",
+            fg="#ffffff",
+            width=5,
+            anchor="center",
+        )
+        self.smelter_worker_value.pack(side="left")
+        self.btn_smelter_worker_plus = tk.Button(
+            smelter_worker_row,
+            text="+",
+            font=("Helvetica", scaled(10), "bold"),
+            width=2,
+            bg="#ffd32a",
+            fg="#000000",
+            command=self._bind_action(self.state.action_add_smelter_worker),
+        )
+        self.btn_smelter_worker_plus.pack(side="left", padx=2)
+        Tooltip(self.btn_smelter_worker_plus, "Assigns a smelter (per furnace).")
+
+        # blacksmith row
+        blacksmith_row = tk.Frame(assign_col, bg="#1e272e")
+        self.blacksmith_row = blacksmith_row
+        self.blacksmith_label = tk.Label(
+            blacksmith_row,
+            text="blacksmith",
+            font=("Helvetica", scaled(11)),
+            bg="#1e272e",
+            fg="#ffffff",
+            width=14,
+            anchor="w",
+        )
+        self.blacksmith_label.pack(side="left")
+        self.btn_blacksmith_minus = tk.Button(
+            blacksmith_row,
+            text="-",
+            font=("Helvetica", scaled(10), "bold"),
+            width=2,
+            bg="#57606f",
+            fg="#ffffff",
+            command=self._bind_action(self.state.action_remove_blacksmith),
+        )
+        self.btn_blacksmith_minus.pack(side="left", padx=(4, 2))
+        self.blacksmith_value = tk.Label(
+            blacksmith_row,
+            text="0/0",
+            font=("Helvetica", scaled(11), "bold"),
+            bg="#1e272e",
+            fg="#ffffff",
+            width=5,
+            anchor="center",
+        )
+        self.blacksmith_value.pack(side="left")
+        self.btn_blacksmith_plus = tk.Button(
+            blacksmith_row,
+            text="+",
+            font=("Helvetica", scaled(10), "bold"),
+            width=2,
+            bg="#ffa502",
+            fg="#000000",
+            command=self._bind_action(self.state.action_add_blacksmith),
+        )
+        self.btn_blacksmith_plus.pack(side="left", padx=2)
+        Tooltip(self.btn_blacksmith_plus, "Assigns a blacksmith (per smithy).")
+
+        # tailor worker row
+        tailor_worker_row = tk.Frame(assign_col, bg="#1e272e")
+        self.tailor_worker_row = tailor_worker_row
+        self.tailor_worker_label = tk.Label(
+            tailor_worker_row,
+            text="tailor",
+            font=("Helvetica", scaled(11)),
+            bg="#1e272e",
+            fg="#ffffff",
+            width=14,
+            anchor="w",
+        )
+        self.tailor_worker_label.pack(side="left")
+        self.btn_tailor_worker_minus = tk.Button(
+            tailor_worker_row,
+            text="-",
+            font=("Helvetica", scaled(10), "bold"),
+            width=2,
+            bg="#57606f",
+            fg="#ffffff",
+            command=self._bind_action(self.state.action_remove_tailor_worker),
+        )
+        self.btn_tailor_worker_minus.pack(side="left", padx=(4, 2))
+        self.tailor_worker_value = tk.Label(
+            tailor_worker_row,
+            text="0/0",
+            font=("Helvetica", scaled(11), "bold"),
+            bg="#1e272e",
+            fg="#ffffff",
+            width=5,
+            anchor="center",
+        )
+        self.tailor_worker_value.pack(side="left")
+        self.btn_tailor_worker_plus = tk.Button(
+            tailor_worker_row,
+            text="+",
+            font=("Helvetica", scaled(10), "bold"),
+            width=2,
+            bg="#95afc0",
+            fg="#000000",
+            command=self._bind_action(self.state.action_add_tailor_worker),
+        )
+        self.btn_tailor_worker_plus.pack(side="left", padx=2)
+        Tooltip(self.btn_tailor_worker_plus, "Assigns a tailor (1 slot per workshop).")
+
+        # tanner row
+        tanner_row = tk.Frame(assign_col, bg="#1e272e")
+        self.tanner_row = tanner_row
+        self.tanner_label = tk.Label(
+            tanner_row,
+            text="tanner",
+            font=("Helvetica", scaled(11)),
+            bg="#1e272e",
+            fg="#ffffff",
+            width=14,
+            anchor="w",
+        )
+        self.tanner_label.pack(side="left")
+        self.btn_tanner_minus = tk.Button(
+            tanner_row,
+            text="-",
+            font=("Helvetica", scaled(10), "bold"),
+            width=2,
+            bg="#57606f",
+            fg="#ffffff",
+            command=self._bind_action(self.state.action_remove_tanner),
+        )
+        self.btn_tanner_minus.pack(side="left", padx=(4, 2))
+        self.tanner_value = tk.Label(
+            tanner_row,
+            text="0/0",
+            font=("Helvetica", scaled(11), "bold"),
+            bg="#1e272e",
+            fg="#ffffff",
+            width=5,
+            anchor="center",
+        )
+        self.tanner_value.pack(side="left")
+        self.btn_tanner_plus = tk.Button(
+            tanner_row,
+            text="+",
+            font=("Helvetica", scaled(10), "bold"),
+            width=2,
+            bg="#a4b0be",
+            fg="#000000",
+            command=self._bind_action(self.state.action_add_tanner),
+        )
+        self.btn_tanner_plus.pack(side="left", padx=2)
+        Tooltip(self.btn_tanner_plus, "Assigns a tanner (per tannery).")
 
         # buildings
         buildings_frame = tk.Frame(build_col, bg="#1e272e")
@@ -623,7 +1000,54 @@ class GameApp:
             command=self._bind_action(self.state.action_build_lumber_mill),
         )
         self.btn_mill_plus.pack(side="left", padx=2)
-        Tooltip(self.btn_mill_plus, "Cost: 20 wood, 1 peasant (staffed)")
+        Tooltip(self.btn_mill_plus, "Cost: 20 wood. Provides 2 sawyer slots.")
+
+        # bowyer shop row
+        bowyer_shop_row = tk.Frame(buildings_frame, bg="#1e272e")
+        self.bowyer_shop_row = bowyer_shop_row
+        self.bowyer_shop_label = tk.Label(
+            bowyer_shop_row,
+            text="bowyer shop",
+            font=("Helvetica", scaled(11)),
+            bg="#1e272e",
+            fg="#ffffff",
+            width=14,
+            anchor="w",
+        )
+        self.bowyer_shop_label.pack(side="left")
+        self.btn_bowyer_shop_minus = tk.Button(
+            bowyer_shop_row,
+            text="-",
+            font=("Helvetica", scaled(10), "bold"),
+            width=2,
+            bg="#57606f",
+            fg="#ffffff",
+            state="disabled",
+            command=self._bind_action(self.state.action_abandon_bowyer_shop),
+        )
+        self.btn_bowyer_shop_minus.pack(side="left", padx=(4, 2))
+        self.bowyer_shop_value = tk.Label(
+            bowyer_shop_row,
+            text="0",
+            font=("Helvetica", scaled(11), "bold"),
+            bg="#1e272e",
+            fg="#ffffff",
+            width=3,
+            anchor="center",
+        )
+        self.bowyer_shop_value.pack(side="left")
+        self.btn_bowyer_shop_plus = tk.Button(
+            bowyer_shop_row,
+            text="+",
+            font=("Helvetica", scaled(10), "bold"),
+            width=2,
+            bg="#84817a",
+            fg="#000000",
+            state="disabled",
+            command=self._bind_action(self.state.action_build_bowyer_shop),
+        )
+        self.btn_bowyer_shop_plus.pack(side="left", padx=2)
+        Tooltip(self.btn_bowyer_shop_plus, "Cost: 6 planks. Provides 2 bowyer slots.")
 
         # farm row
         farm_row = tk.Frame(buildings_frame, bg="#1e272e")
@@ -669,7 +1093,7 @@ class GameApp:
             command=self._bind_action(self.state.action_build_farm),
         )
         self.btn_farm_plus.pack(side="left", padx=2)
-        Tooltip(self.btn_farm_plus, "Cost: 8 planks, 1 peasant (staffed)")
+        Tooltip(self.btn_farm_plus, "Cost: 8 planks. Provides 3 farmer slots.")
 
         # quarry row
         quarry_row = tk.Frame(buildings_frame, bg="#1e272e")
@@ -715,7 +1139,7 @@ class GameApp:
             command=self._bind_action(self.state.action_build_quarry),
         )
         self.btn_quarry_plus.pack(side="left", padx=2)
-        Tooltip(self.btn_quarry_plus, "Cost: 4 planks, 1 peasant, requires quarry site")
+        Tooltip(self.btn_quarry_plus, "Cost: 4 planks. Requires quarry site; enables stonemasons.")
 
         # mine row
         mine_row = tk.Frame(buildings_frame, bg="#1e272e")
@@ -761,14 +1185,14 @@ class GameApp:
             command=self._bind_action(self.state.action_build_mine),
         )
         self.btn_mine_plus.pack(side="left", padx=2)
-        Tooltip(self.btn_mine_plus, "Cost: 4 planks, 1 peasant, requires ore site")
+        Tooltip(self.btn_mine_plus, "Cost: 4 planks. Requires ore site; enables miners.")
 
-        # smelter row
+        # furnace row
         smelter_row = tk.Frame(buildings_frame, bg="#1e272e")
         self.smelter_row = smelter_row
         self.smelter_label = tk.Label(
             smelter_row,
-            text="smelter",
+            text="furnace",
             font=("Helvetica", scaled(11)),
             bg="#1e272e",
             fg="#ffffff",
@@ -808,10 +1232,7 @@ class GameApp:
             command=self._bind_action(self.state.action_build_smelter),
         )
         self.btn_smelter_plus.pack(side="left", padx=2)
-        Tooltip(
-            self.btn_smelter_plus,
-            "Cost: 2 planks, 8 stone, 1 peasant (staffed)",
-        )
+        Tooltip(self.btn_smelter_plus, "Cost: 2 planks, 8 stone. Builds a furnace for smelters.")
 
         # cellar row (storage)
         cellar_row = tk.Frame(buildings_frame, bg="#1e272e")
@@ -956,17 +1377,14 @@ class GameApp:
             command=self._bind_action(self.state.action_build_smithy),
         )
         self.btn_smithy_plus.pack(side="left", padx=2)
-        Tooltip(
-            self.btn_smithy_plus,
-            "Cost: 10 planks, 4 stone, 1 peasant (staffed)",
-        )
+        Tooltip(self.btn_smithy_plus, "Cost: 10 planks, 4 stone. Enables blacksmiths.")
 
         # tailor row
         tailor_row = tk.Frame(buildings_frame, bg="#1e272e")
         self.tailor_row = tailor_row
         self.tailor_label = tk.Label(
             tailor_row,
-            text="tailor",
+            text="textile workshop",
             font=("Helvetica", scaled(11)),
             bg="#1e272e",
             fg="#ffffff",
@@ -1008,8 +1426,55 @@ class GameApp:
         self.btn_tailor_plus.pack(side="left", padx=2)
         Tooltip(
             self.btn_tailor_plus,
-            "Cost: 6 planks, 1 peasant (staffed). Crafts clothing from linen.",
+            "Cost: 6 planks. Crafts clothing from linen.",
         )
+
+        # tannery row
+        tannery_row = tk.Frame(buildings_frame, bg="#1e272e")
+        self.tannery_row = tannery_row
+        self.tannery_label = tk.Label(
+            tannery_row,
+            text="tannery",
+            font=("Helvetica", scaled(11)),
+            bg="#1e272e",
+            fg="#ffffff",
+            width=14,
+            anchor="w",
+        )
+        self.tannery_label.pack(side="left")
+        self.btn_tannery_minus = tk.Button(
+            tannery_row,
+            text="-",
+            font=("Helvetica", scaled(10), "bold"),
+            width=2,
+            bg="#57606f",
+            fg="#ffffff",
+            state="disabled",
+            command=self._bind_action(self.state.action_abandon_tannery),
+        )
+        self.btn_tannery_minus.pack(side="left", padx=(4, 2))
+        self.tannery_value = tk.Label(
+            tannery_row,
+            text="0",
+            font=("Helvetica", scaled(11), "bold"),
+            bg="#1e272e",
+            fg="#ffffff",
+            width=3,
+            anchor="center",
+        )
+        self.tannery_value.pack(side="left")
+        self.btn_tannery_plus = tk.Button(
+            tannery_row,
+            text="+",
+            font=("Helvetica", scaled(10), "bold"),
+            width=2,
+            bg="#84817a",
+            fg="#000000",
+            state="disabled",
+            command=self._bind_action(self.state.action_build_tannery),
+        )
+        self.btn_tannery_plus.pack(side="left", padx=2)
+        Tooltip(self.btn_tannery_plus, "Cost: 8 wood, 4 planks. Requires a found spring.")
 
         # news log column
         news_header = tk.Frame(news_col, bg="#1e272e")
@@ -1540,10 +2005,17 @@ class GameApp:
         self.peasant_value.config(text=f"{s.peasants}")
         self.hunter_value.config(text=f"{s.hunters}")
         self.woodsman_value.config(text=f"{s.woodsmen}")
-        self.bowyer_value.config(text=f"{s.bowyers}")
-        self.weaver_value.config(text=f"{s.weavers}")
+        self.bowyer_value.config(text=f"{s.bowyers}/{s._job_capacity('bowyer') or 0}")
+        self.weaver_value.config(text=f"{s.weavers}/{s._job_capacity('weaver') or 0}")
         self.ranger_value.config(text=f"{s.rangers}")
-        self.tailor_value.config(text=f"{s.tailor_shops}")
+        self.sawyer_value.config(text=f"{s.sawyers}/{s._job_capacity('sawyer') or 0}")
+        self.farmer_value.config(text=f"{s.farmers}/{s._job_capacity('farmer') or 0}")
+        self.stonemason_value.config(text=f"{s.stonemasons}/{s._job_capacity('stonemason') or 0}")
+        self.miner_value.config(text=f"{s.miners}/{s._job_capacity('miner') or 0}")
+        self.smelter_worker_value.config(text=f"{s.smelter_workers}/{s._job_capacity('smelter') or 0}")
+        self.blacksmith_value.config(text=f"{s.blacksmiths}/{s._job_capacity('blacksmith') or 0}")
+        self.tailor_worker_value.config(text=f"{s.tailors}/{s._job_capacity('tailor') or 0}")
+        self.tanner_value.config(text=f"{s.tanners}/{s._job_capacity('tanner') or 0}")
         # building counts
         total_quarry_sites = int(s.quarries + s.resources["QuarrySites"])
         total_mine_sites = int(s.mines + s.resources["MineSites"])
@@ -1560,27 +2032,38 @@ class GameApp:
             lines.append(f"bowyers {s.bowyers}")
         if s.weavers:
             lines.append(f"weavers {s.weavers}")
+        if s.sawyers:
+            lines.append(f"sawyers {s.sawyers}")
+        if s.farmers:
+            lines.append(f"farmers {s.farmers}")
         if s.rangers:
             lines.append(f"rangers {s.rangers}")
-        if s.lumber_mills:
-            lines.append(f"carpenters {s.lumber_mills}")
-        if s.farms:
-            lines.append(f"farmers {s.farms}")
-        if s.smelters:
-            lines.append(f"smelters {s.smelters}")
-        if s.smithies:
-            lines.append(f"smiths {s.smithies}")
-        if s.tailor_shops:
-            lines.append(f"tailors {s.tailor_shops}")
+        if s.stonemasons:
+            lines.append(f"stonemasons {s.stonemasons}")
+        if s.miners:
+            lines.append(f"miners {s.miners}")
+        if s.smelter_workers:
+            lines.append(f"smelters {s.smelter_workers}")
+        if s.blacksmiths:
+            lines.append(f"blacksmiths {s.blacksmiths}")
+        if s.tailors:
+            lines.append(f"tailors {s.tailors}")
+        if s.tanners:
+            lines.append(f"tanners {s.tanners}")
         self.pop_tooltip.text = "\n".join(lines)
 
         # building counts
         self.house_value.config(text=f"{s.houses}")
         self.mill_value.config(text=f"{s.lumber_mills}")
         self.farm_value.config(text=f"{s.farms}")
+        if hasattr(self, "bowyer_shop_value"):
+            self.bowyer_shop_value.config(text=f"{s.bowyer_shops}")
         self.smelter_value.config(text=f"{s.smelters}")
         self.smithy_value.config(text=f"{s.smithies}")
+        self.tailor_value.config(text=f"{s.tailor_shops}")
         self.cellar_value.config(text=f"{s.cellars}")
+        if hasattr(self, "tannery_value"):
+            self.tannery_value.config(text=f"{s.tanneries}")
         self.warehouse_value.config(text=f"{s.warehouses}")
 
         # unlock rows
@@ -1589,44 +2072,66 @@ class GameApp:
                 self.hunter_row.pack(anchor="w", pady=(10, 2), fill="x")
             if not self.woods_row.winfo_manager():
                 self.woods_row.pack(anchor="w", pady=2, fill="x")
-            if s.bowyer_unlocked and not self.bowyer_row.winfo_manager():
+            if s.bowyer_unlocked and s.bowyer_shops > 0 and not self.bowyer_row.winfo_manager():
                 self.bowyer_row.pack(anchor="w", pady=2, fill="x")
             if s.weaver_unlocked and not self.weaver_row.winfo_manager():
                 self.weaver_row.pack(anchor="w", pady=2, fill="x")
+            if s.lumber_mills > 0 and not self.sawyer_row.winfo_manager():
+                self.sawyer_row.pack(anchor="w", pady=2, fill="x")
+            if s.farms > 0 and not self.farmer_row.winfo_manager():
+                self.farmer_row.pack(anchor="w", pady=2, fill="x")
             if s.ranger_unlocked and not self.ranger_row.winfo_manager():
                 self.ranger_row.pack(anchor="w", pady=2, fill="x")
+            if s.bowyer_unlocked and s.bowyer_shops > 0 and not self.bowyer_row.winfo_manager():
+                self.bowyer_row.pack(anchor="w", pady=2, fill="x")
+            if s.quarry_unlocked and s.quarries > 0 and not self.stonemason_row.winfo_manager():
+                self.stonemason_row.pack(anchor="w", pady=2, fill="x")
+            if s.mine_unlocked and s.mines > 0 and not self.miner_row.winfo_manager():
+                self.miner_row.pack(anchor="w", pady=2, fill="x")
             if s.quarry_unlocked and not self.quarry_row.winfo_manager():
                 self.quarry_row.pack(anchor="w", pady=2, fill="x")
             if s.mine_unlocked and not self.mine_row.winfo_manager():
                 self.mine_row.pack(anchor="w", pady=2, fill="x")
             if s.smelter_unlocked and not self.smelter_row.winfo_manager():
                 self.smelter_row.pack(anchor="w", pady=2, fill="x")
+            if s.smelter_unlocked and s.smelters > 0 and not self.smelter_worker_row.winfo_manager():
+                self.smelter_worker_row.pack(anchor="w", pady=2, fill="x")
             if s.smithy_unlocked and not self.smithy_row.winfo_manager():
                 self.smithy_row.pack(anchor="w", pady=2, fill="x")
-            if s.tailor_unlocked and not self.tailor_row.winfo_manager():
-                self.tailor_row.pack(anchor="w", pady=2, fill="x")
+            if s.smithy_unlocked and s.smithies > 0 and not self.blacksmith_row.winfo_manager():
+                self.blacksmith_row.pack(anchor="w", pady=2, fill="x")
+            if s.tailor_unlocked and s.tailor_shops > 0 and not self.tailor_worker_row.winfo_manager():
+                self.tailor_worker_row.pack(anchor="w", pady=2, fill="x")
+            if s.tannery_unlocked and s.tanneries > 0 and not self.tanner_row.winfo_manager():
+                self.tanner_row.pack(anchor="w", pady=2, fill="x")
 
         if s.farm_unlocked and not self.farm_row.winfo_manager():
             self.farm_row.pack(anchor="w", pady=2, fill="x")
+        if s.bowyer_unlocked and not self.bowyer_shop_row.winfo_manager():
+            self.bowyer_shop_row.pack(anchor="w", pady=2, fill="x")
 
         # ensure crafting rows show once unlocked
         if s.jobs_unlocked and s.weaver_unlocked and not self.weaver_row.winfo_manager():
             self.weaver_row.pack(anchor="w", pady=2, fill="x")
-        if s.jobs_unlocked and s.bowyer_unlocked and not self.bowyer_row.winfo_manager():
+        if s.jobs_unlocked and s.bowyer_unlocked and s.bowyer_shops > 0 and not self.bowyer_row.winfo_manager():
             self.bowyer_row.pack(anchor="w", pady=2, fill="x")
         if s.jobs_unlocked and s.ranger_unlocked and not self.ranger_row.winfo_manager():
             self.ranger_row.pack(anchor="w", pady=2, fill="x")
-        if s.jobs_unlocked and s.tailor_unlocked and not self.tailor_row.winfo_manager():
-            self.tailor_row.pack(anchor="w", pady=2, fill="x")
+        if s.jobs_unlocked and s.tailor_unlocked and s.tailor_shops > 0 and not self.tailor_worker_row.winfo_manager():
+            self.tailor_worker_row.pack(anchor="w", pady=2, fill="x")
         if s.jobs_unlocked and s.quarry_unlocked and not self.quarry_row.winfo_manager():
             self.quarry_row.pack(anchor="w", pady=2, fill="x")
         if s.jobs_unlocked and s.mine_unlocked and not self.mine_row.winfo_manager():
             self.mine_row.pack(anchor="w", pady=2, fill="x")
         if s.jobs_unlocked and s.smelter_unlocked and not self.smelter_row.winfo_manager():
             self.smelter_row.pack(anchor="w", pady=2, fill="x")
+        if s.jobs_unlocked and s.smelter_unlocked and s.smelters > 0 and not self.smelter_worker_row.winfo_manager():
+            self.smelter_worker_row.pack(anchor="w", pady=2, fill="x")
         if s.jobs_unlocked and s.smithy_unlocked and not self.smithy_row.winfo_manager():
             self.smithy_row.pack(anchor="w", pady=2, fill="x")
-        if (s.resources["Meat"] >= 5 and s.resources["Grain"] >= 5) or s.cellars > 0:
+        if s.jobs_unlocked and s.smithy_unlocked and s.smithies > 0 and not self.blacksmith_row.winfo_manager():
+            self.blacksmith_row.pack(anchor="w", pady=2, fill="x")
+        if (s.cellar_unlocked) or s.cellars > 0:
             if not self.cellar_row.winfo_manager():
                 self.cellar_row.pack(anchor="w", pady=2, fill="x")
         if (
@@ -1635,6 +2140,8 @@ class GameApp:
         ):
             if not self.warehouse_row.winfo_manager():
                 self.warehouse_row.pack(anchor="w", pady=2, fill="x")
+        if s.tannery_unlocked and not self.tannery_row.winfo_manager():
+            self.tannery_row.pack(anchor="w", pady=2, fill="x")
 
         # enable/disable buttons based on affordability
         self._update_button_states()
@@ -1647,8 +2154,6 @@ class GameApp:
             self.btn_hunter_plus.config(state="disabled", bg="#84817a")
             self.btn_woodsman_plus.config(state="disabled", bg="#84817a")
             self.btn_bowyer_plus.config(state="disabled", bg="#84817a")
-            self.btn_weaver_plus.config(state="disabled", bg="#84817a")
-            self.btn_tailor_plus.config(state="disabled", bg="#84817a")
             self.btn_ranger_plus.config(state="disabled", bg="#84817a")
         else:
             self.btn_hunter_plus.config(state="normal", bg="#33d9b2")
@@ -1657,14 +2162,6 @@ class GameApp:
                 self.btn_bowyer_plus.config(state="normal", bg="#eccc68")
             else:
                 self.btn_bowyer_plus.config(state="disabled", bg="#84817a")
-            if s.weaver_unlocked:
-                self.btn_weaver_plus.config(state="normal", bg="#34ace0")
-            else:
-                self.btn_weaver_plus.config(state="disabled", bg="#84817a")
-            if s.tailor_unlocked:
-                self.btn_tailor_plus.config(state="normal", bg="#95afc0")
-            else:
-                self.btn_tailor_plus.config(state="disabled", bg="#84817a")
             # ranger enable handled later when unlocked flag is set
 
         if s.hunters > 0:
@@ -1692,6 +2189,47 @@ class GameApp:
         else:
             self.btn_ranger_minus.config(state="disabled")
 
+        # building-gated jobs
+        cap_sawyer = s._job_capacity("sawyer") or 0
+        cap_farmer = s._job_capacity("farmer") or 0
+        cap_stone = s._job_capacity("stonemason") or 0
+        cap_miner = s._job_capacity("miner") or 0
+        cap_bowyer = s._job_capacity("bowyer") or 0
+        cap_weaver = s._job_capacity("weaver") or 0
+        cap_smelter = s._job_capacity("smelter") or 0
+        cap_blacksmith = s._job_capacity("blacksmith") or 0
+        cap_tailor = s._job_capacity("tailor") or 0
+        cap_tanner = s._job_capacity("tanner") or 0
+
+        def _enable_job(plus_btn, condition, color):
+            if condition:
+                plus_btn.config(state="normal", bg=color)
+            else:
+                plus_btn.config(state="disabled", bg="#84817a")
+
+        _enable_job(self.btn_sawyer_plus, s.peasants > 0 and s.lumber_mills > 0 and s.sawyers < cap_sawyer, "#ffa801")
+        _enable_job(self.btn_farmer_plus, s.peasants > 0 and s.farms > 0 and s.farmers < cap_farmer, "#f5cd79")
+        _enable_job(self.btn_stonemason_plus, s.peasants > 0 and s.quarries > 0 and s.stonemasons < cap_stone, "#d1ccc0")
+        _enable_job(self.btn_miner_plus, s.peasants > 0 and s.mines > 0 and s.miners < cap_miner, "#ced6e0")
+        _enable_job(self.btn_bowyer_plus, s.peasants > 0 and s.bowyer_shops > 0 and s.bowyers < cap_bowyer, "#eccc68")
+        _enable_job(self.btn_weaver_plus, s.peasants > 0 and s.tailor_shops > 0 and s.weavers < cap_weaver, "#34ace0")
+        _enable_job(self.btn_smelter_worker_plus, s.peasants > 0 and s.smelters > 0 and s.smelter_workers < cap_smelter, "#ffd32a")
+        _enable_job(self.btn_blacksmith_plus, s.peasants > 0 and s.smithies > 0 and s.blacksmiths < cap_blacksmith, "#ffa502")
+        _enable_job(self.btn_tailor_worker_plus, s.peasants > 0 and s.tailor_shops > 0 and s.tailors < cap_tailor, "#95afc0")
+        _enable_job(self.btn_tanner_plus, s.peasants > 0 and s.tanneries > 0 and s.tanners < cap_tanner, "#a4b0be")
+
+        for btn, count in [
+            (self.btn_sawyer_minus, s.sawyers),
+            (self.btn_farmer_minus, s.farmers),
+            (self.btn_stonemason_minus, s.stonemasons),
+            (self.btn_miner_minus, s.miners),
+            (self.btn_smelter_worker_minus, s.smelter_workers),
+            (self.btn_blacksmith_minus, s.blacksmiths),
+            (self.btn_tailor_worker_minus, s.tailors),
+            (self.btn_tanner_minus, s.tanners),
+        ]:
+            btn.config(state="normal" if count > 0 else "disabled")
+
         ranger_ready = (
             s.ranger_unlocked
             and s.peasants > 0
@@ -1708,7 +2246,6 @@ class GameApp:
             s.quarry_unlocked
             and s.resources["QuarrySites"] >= 1
             and s.resources["Planks"] >= 4
-            and s.peasants > 0
         ):
             self.btn_quarry_plus.config(state="normal", bg="#d1ccc0")
         else:
@@ -1718,7 +2255,6 @@ class GameApp:
             s.mine_unlocked
             and s.resources["MineSites"] >= 1
             and s.resources["Planks"] >= 4
-            and s.peasants > 0
         ):
             self.btn_mine_plus.config(state="normal", bg="#d1ccc0")
         else:
@@ -1740,7 +2276,7 @@ class GameApp:
             self.btn_peasant_minus.config(state="disabled")
 
         # buildings
-        if s.resources["Wood"] >= 20 and s.peasants > 0:
+        if s.resources["Wood"] >= 20:
             self.btn_mill_plus.config(state="normal", bg="#2ecc71")
         else:
             self.btn_mill_plus.config(state="disabled", bg="#84817a")
@@ -1750,16 +2286,20 @@ class GameApp:
         else:
             self.btn_house_plus.config(state="disabled", bg="#84817a")
 
-        if s.resources["Planks"] >= 8 and s.peasants > 0:
+        if s.resources["Planks"] >= 8:
             self.btn_farm_plus.config(state="normal", bg="#f5cd79")
         else:
             self.btn_farm_plus.config(state="disabled", bg="#84817a")
+
+        if s.bowyer_unlocked and s.resources["Planks"] >= 6:
+            self.btn_bowyer_shop_plus.config(state="normal", bg="#eccc68")
+        else:
+            self.btn_bowyer_shop_plus.config(state="disabled", bg="#84817a")
 
         if (
             s.smelter_unlocked
             and s.resources["Stone"] >= 8
             and s.resources["Planks"] >= 2
-            and s.peasants > 0
         ):
             self.btn_smelter_plus.config(state="normal", bg="#ffd32a")
         else:
@@ -1769,27 +2309,23 @@ class GameApp:
             s.smithy_unlocked
             and s.resources["Stone"] >= 4
             and s.resources["Planks"] >= 10
-            and s.peasants > 0
         ):
             self.btn_smithy_plus.config(state="normal", bg="#ffa502")
         else:
             self.btn_smithy_plus.config(state="disabled", bg="#84817a")
 
-        if (
-            s.tailor_unlocked
-            and s.resources["Planks"] >= 6
-            and s.peasants > 0
-        ):
+        if s.flax_unlocked and s.resources["Planks"] >= 6:
             self.btn_tailor_plus.config(state="normal", bg="#95afc0")
         else:
             self.btn_tailor_plus.config(state="disabled", bg="#84817a")
 
+        if s.tannery_unlocked and s.resources["Wood"] >= 8 and s.resources["Planks"] >= 4:
+            self.btn_tannery_plus.config(state="normal", bg="#a4b0be")
+        else:
+            self.btn_tannery_plus.config(state="disabled", bg="#84817a")
+
         # storage buildings
-        if (
-            s.resources["Planks"] >= 6
-            and s.resources["Meat"] >= 5
-            and s.resources["Grain"] >= 5
-        ):
+        if s.cellar_unlocked:
             self.btn_cellar_plus.config(state="normal", bg="#95afc0")
         else:
             self.btn_cellar_plus.config(state="disabled", bg="#84817a")
@@ -1808,6 +2344,11 @@ class GameApp:
             self.btn_mill_minus.config(state="normal")
         else:
             self.btn_mill_minus.config(state="disabled")
+
+        if s.bowyer_shops > 0:
+            self.btn_bowyer_shop_minus.config(state="normal")
+        else:
+            self.btn_bowyer_shop_minus.config(state="disabled")
 
         if s.farms > 0:
             self.btn_farm_minus.config(state="normal")
@@ -1838,6 +2379,11 @@ class GameApp:
             self.btn_warehouse_minus.config(state="normal")
         else:
             self.btn_warehouse_minus.config(state="disabled")
+
+        if s.tanneries > 0:
+            self.btn_tannery_minus.config(state="normal")
+        else:
+            self.btn_tannery_minus.config(state="disabled")
 
 
 def main():
